@@ -1,0 +1,10 @@
+event_inherited();
+collision = false;
+active = false;
+damage = 1;
+anomaly_grid_block();
+my_emitter = audio_emitter_create();
+audio_emitter_falloff(my_emitter, 32, 128, 1);
+audio_emitter_position(my_emitter, x, y, 0);
+my_sound = undefined;
+alarm[1] = 1;

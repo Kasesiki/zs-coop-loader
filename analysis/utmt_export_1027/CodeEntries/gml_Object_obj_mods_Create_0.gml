@@ -1,0 +1,9 @@
+mods_init();
+ai_profiles_mod_autoload();
+npc_data_mod_autoload();
+mods_perform_event_file("init");
+mods_autoload_chests();
+ai_barks_mod_autoload();
+ai_roaming_mod_autoload();
+npc_data_validate();
+mods_check_npc_ai_profiles();

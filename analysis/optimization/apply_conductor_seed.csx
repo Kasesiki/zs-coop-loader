@@ -35,7 +35,7 @@ importGroup.QueueFindReplace(dialogueText,
     dia_type[i][u] = ""train_skin"";
     u++;
     text[i][u] = ""npc.interaction.i_want_to_leave"";",
-    
+
     @"    text[i][u] = ""npc.interaction.train_type"";
     dia_type[i][u] = ""train_skin"";
     u++;
@@ -111,12 +111,6 @@ function map_seed_draft_clear()
     return """";
 }
 
-function map_seed_draft_random()
-{
-    global.map_seed_draft = string(irandom(4294967295));
-    return global.map_seed_draft;
-}
-
 function map_seed_draft_valid()
 {
     var _text = map_seed_draft_get();
@@ -129,25 +123,6 @@ function map_seed_draft_valid()
         return false;
     }
     return real(_text) <= 4294967295;
-}
-
-function map_seed_format_text(arg0)
-{
-    var _text = string(arg0);
-    var _length = string_length(_text);
-    var _out = """";
-    var _count = 0;
-    for (var _i = _length; _i >= 1; _i--)
-    {
-        _out = string_char_at(_text, _i) + _out;
-        _count++;
-        if (_count == 3 && _i > 1)
-        {
-            _out = "" "" + _out;
-            _count = 0;
-        }
-    }
-    return _out;
 }
 
 function map_seed_draft_commit()
@@ -166,11 +141,6 @@ function map_seed_draft_commit()
     return ""set"";
 }
 
-function map_seed_key_backspace()
-{
-    return keyboard_check_pressed(vk_backspace);
-}
-
 function npc_dialogue_map_is_unlocked(arg0 = uiGetData().map_selected)",
     true);
 
@@ -181,8 +151,8 @@ function npc_dialogue_map_is_unlocked(arg0 = uiGetData().map_selected)",
 importGroup.QueueFindReplace(uiFunctions,
     @"    uiCatspeakGetEnvironment().addGlobalFunction(""NPCDialogueHealRad"", npc_dialogue_heal_rad, ""NPCDialogueFreeEquipment"",",
     @"    uiCatspeakGetEnvironment().addGlobalFunction(""MapSeedDraftBegin"", map_seed_draft_begin, ""MapSeedDraftGet"", map_seed_draft_get, ""MapSeedDraftAppend"", map_seed_draft_append);
-    uiCatspeakGetEnvironment().addGlobalFunction(""MapSeedDraftBackspace"", map_seed_draft_backspace, ""MapSeedDraftClear"", map_seed_draft_clear, ""MapSeedDraftRandom"", map_seed_draft_random, ""MapSeedDraftValid"", map_seed_draft_valid);
-    uiCatspeakGetEnvironment().addGlobalFunction(""MapSeedDraftCommit"", map_seed_draft_commit, ""MapSeedFormat"", map_seed_format_text, ""MapSeedKeyBackspace"", map_seed_key_backspace);
+    uiCatspeakGetEnvironment().addGlobalFunction(""MapSeedDraftBackspace"", map_seed_draft_backspace, ""MapSeedDraftClear"", map_seed_draft_clear, ""MapSeedDraftValid"", map_seed_draft_valid);
+    uiCatspeakGetEnvironment().addGlobalFunction(""MapSeedDraftCommit"", map_seed_draft_commit, ""MapSeedKeyBackspace"", function() { return keyboard_check_pressed(vk_backspace); });
     uiCatspeakGetEnvironment().addGlobalFunction(""NPCDialogueHealRad"", npc_dialogue_heal_rad, ""NPCDialogueFreeEquipment"",",
     true);
 

@@ -19,13 +19,6 @@ build UiBox {
 		}
 	}
 
-	build UiText {
-		font = "font_quest_32px"
-		label = Translate("ui.map_seed.title")
-		color = c_ltgrey
-		margin = 8
-	}
-
 	seed_label = build UiText {
 		identifier = "seed value"
 		font = "font_munro_64px"
@@ -40,29 +33,7 @@ build UiBox {
 		label = Translate("ui.map_seed.hint")
 		wrap = true
 		wrapWidth = 680
-		margin = 8
-	}
-
-	build UiToggleButton {
-		font = "font_quest_32px"
-		label = "- " + Translate("ui.map_seed.button_random")
-
-		captureClick = "action"
-		click = fn {
-			CallInherited()
-			data.map_seed_text = MapSeedDraftRandom()
-		}
-	}
-
-	build UiToggleButton {
-		font = "font_quest_32px"
-		label = "- " + Translate("ui.map_seed.button_erase")
-
-		captureClick = "action"
-		click = fn {
-			CallInherited()
-			data.map_seed_text = MapSeedDraftBackspace()
-		}
+		margin = 4
 	}
 
 	build UiToggleButton {
@@ -88,13 +59,10 @@ build UiBox {
 			if (_result == "invalid") {
 				PopUpMessage(Translate("ui.map_seed.invalid"))
 			} else {
-				if (_result == "random") {
-					PopUpMessage(Translate("ui.map_seed.random_applied"))
-				} else {
-					PopUpMessage(Translate("ui.map_seed.set") + " " + MapSeedFormat(MapSeedDraftGet()))
+				if (_result != "random") {
+					PopUpMessage(Translate("ui.map_seed.set") + " " + MapSeedDraftGet())
 				}
 				UiReplace("left frame", "ZS_vanilla/ui/npc_left_talk.ui")
-				UiReplace("right frame", "ZS_vanilla/ui/npc_right_talk.ui")
 			}
 		}
 	}
@@ -128,12 +96,8 @@ build UiBox {
 			_shown = Translate("ui.map_seed.random_value")
 			seed_label.color = c_grey
 		} else {
-			_shown = MapSeedFormat(data.map_seed_text)
-			if (MapSeedDraftValid()) {
-				seed_label.color = c_yellow
-			} else {
-				seed_label.color = c_red
-			}
+			seed_label.color = c_yellow
+			_shown = data.map_seed_text
 		}
 
 		if (data.map_seed_blink < 45) {

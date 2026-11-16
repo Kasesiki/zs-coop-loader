@@ -77,7 +77,7 @@ pub fn build(coop_dir: &Path, original: &Path, settings: &Settings) -> Result<Bu
     Ok(result)
 }
 
-fn specs(settings: &Settings) -> [Spec; 7] {
+fn specs(settings: &Settings) -> [Spec; 8] {
     [
         Spec {
             enabled: settings.los_cache,
@@ -108,6 +108,11 @@ fn specs(settings: &Settings) -> [Spec; 7] {
             enabled: settings.anomaly_collision_prefilter,
             script: "apply_anomaly_collision_prefilter.csx",
             label: "化学、电异常碰撞预筛选",
+        },
+        Spec {
+            enabled: true,
+            script: "apply_conductor_seed.csx",
+            label: "列车长 seed 选择",
         },
         Spec {
             enabled: settings.gpu_scene_optimization,

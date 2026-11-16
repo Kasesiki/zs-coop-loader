@@ -68,3 +68,59 @@ UTMT 成功写出后重新反编译火焰 Step，检查 NPC 查询只剩一次�
 收益应在同一存档、位置、画质下比较默认版本与
 `--no-anomaly-fire-optimization`。当前没有 GPU 时间测量，静态分析只确认调用路径，
 不能把潜在热点当成已经测量到的瓶颈。
+
+## 列车长种子选择界面
+
+上一版在选好地图后调用 `get_string` 弹出系统输入框，界面与游戏不一致。本版把
+种子设置移到列车长的对话选项中，在打开地图选择之前完成：
+
+- `lista_text` 为 `capotreno` 增加对话项 `npc.interaction.map_seed`，类型为
+  `map_seed`，位置在“列车涂装”和“我要离开”之间；
+- `ZS_vanilla/ui/npc_left_talk.ui` 的 `nextPageDict` 注册 `map_seed` 页面；
+- 新页面 `ZS_vanilla/ui/npc_left_map_seed.ui` 用数字键输入种子，提供“随机种子 /
+  删除最后一位 / 清空 / 确认种子”按钮；留空并确认表示使用随机种子；
+- 确认后页面直接返回列车长对话，随后可从“我要离开”进入地图选择；
+- 种子仍由 `obj_map_generator_Create_0` 一次性消费，消费后清除覆盖值；
+- 输入、校验和格式化放在 `apply_conductor_seed.csx` 新增的 GML 辅助函数中，
+  并通过 `ui_initialize_functions` 注册给 UI 的 Catspeak 环境。
+
+实现文件：
+
+```text
+coop/analysis/optimization/apply_conductor_seed.csx   data.win 补丁
+ZS_vanilla/ui/npc_left_map_seed.ui                    新页面
+ZS_vanilla/ui/npc_left_talk.ui                        页面注册
+ZS_vanilla/languages/english/english.csv              英文文案
+ZS_vanilla/languages/chinese_simplified/chinese_simplified.csv  中文文案
+coop/ui_seed/                                         松散文件快照与重新部署说明
+```
+
+边界与行为：
+
+- `.ui` 和语言 CSV 是游戏目录中的松散文件，不写入 `data.win`；游戏更新覆盖这些
+  文件后需要重新应用。其它语言没有新增文案时会回退到英文。
+- 种子页面没有把 Backspace 绑定为“返回”，因此 Backspace 在该页用于删除一位数字；
+  要回到列车长对话请点击“返回”，Escape 仍会关闭整个对话。
+- 确认后的种子作用于下一次生成的地图。若确认后不乘车直接离开对话，种子仍会保留
+  到下一次地图生成时使用。
+- 种子范围 0 到 4294967295，最多 10 位数字；超过范围时确认会提示错误，显示为红色。
+- 任意数字输入依赖键盘数字键；手柄可以操作“随机种子 / 删除最后一位 / 清空 / 确认”
+  按钮，但不能直接输入任意数字。手柄的返回键在该页不触发返回，需要导航到“返回”
+  按钮。
+
+验证：
+
+```bash
+cd coop
+./target/release/zs-coop-loader "../ZERO Sievert.exe" --dry-run
+```
+
+该命令从 `data_original_backup.win` 重新生成全部补丁并只写临时文件；本轮已确认
+UTMT 能编译新增的 GML，反编译 `npc_dialogue_map_go`、`lista_text`、
+`ui_initialize_functions` 和 `obj_map_generator_Create_0` 后，新增函数、对话项和
+种子消费逻辑均保持完整。UI 页面无法在当前环境启动游戏窗口验证，需要在游戏内
+实际打开列车长对话检查排版与输入。
+
+当前已写入游戏的 `data.win`：375862552 字节，
+SHA-256 `df6c43148b7e59a813dd69874609aa6b0310b5b286a5af2ace45ecff1469baac`。
+原始备份仍为 `95252ac0...a7a7daa`，未改动。

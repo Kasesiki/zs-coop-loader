@@ -1,0 +1,151 @@
+build UiBox {
+	ltrb = [8, 8, "100%", "100%"]
+
+	LayoutAsVerticalList("left", 0, true)
+
+	data.map_seed_text = MapSeedDraftBegin()
+	data.map_seed_blink = 0
+	data.map_seed_shown = ""
+
+	build UiToggleButton {
+		font = "font_quest_32px"
+		label = "- " + Translate("ui.back")
+
+		captureClick = "action"
+		click = fn {
+			CallInherited()
+			UiReplace("left frame", "ZS_vanilla/ui/npc_left_talk.ui")
+			UiReplace("right frame", "ZS_vanilla/ui/npc_right_talk.ui")
+		}
+	}
+
+	build UiText {
+		font = "font_quest_32px"
+		label = Translate("ui.map_seed.title")
+		color = c_ltgrey
+		margin = 8
+	}
+
+	seed_label = build UiText {
+		identifier = "seed value"
+		font = "font_munro_64px"
+		color = c_grey
+		label = Translate("ui.map_seed.random_value")
+		margin = 4
+	}
+
+	build UiText {
+		font = "font_quest_32px"
+		color = c_grey
+		label = Translate("ui.map_seed.hint")
+		wrap = true
+		wrapWidth = 680
+		margin = 8
+	}
+
+	build UiToggleButton {
+		font = "font_quest_32px"
+		label = "- " + Translate("ui.map_seed.button_random")
+
+		captureClick = "action"
+		click = fn {
+			CallInherited()
+			data.map_seed_text = MapSeedDraftRandom()
+		}
+	}
+
+	build UiToggleButton {
+		font = "font_quest_32px"
+		label = "- " + Translate("ui.map_seed.button_erase")
+
+		captureClick = "action"
+		click = fn {
+			CallInherited()
+			data.map_seed_text = MapSeedDraftBackspace()
+		}
+	}
+
+	build UiToggleButton {
+		font = "font_quest_32px"
+		label = "- " + Translate("ui.map_seed.button_clear")
+
+		captureClick = "action"
+		click = fn {
+			CallInherited()
+			data.map_seed_text = MapSeedDraftClear()
+		}
+	}
+
+	build UiToggleButton {
+		font = "font_quest_32px"
+		label = "- " + Translate("ui.map_seed.button_apply")
+		color = c_yellow
+
+		captureClick = "action"
+		click = fn {
+			CallInherited()
+			var _result = MapSeedDraftCommit()
+			if (_result == "invalid") {
+				PopUpMessage(Translate("ui.map_seed.invalid"))
+			} else {
+				if (_result == "random") {
+					PopUpMessage(Translate("ui.map_seed.random_applied"))
+				} else {
+					PopUpMessage(Translate("ui.map_seed.set") + " " + MapSeedFormat(MapSeedDraftGet()))
+				}
+				UiReplace("left frame", "ZS_vanilla/ui/npc_left_talk.ui")
+				UiReplace("right frame", "ZS_vanilla/ui/npc_right_talk.ui")
+			}
+		}
+	}
+
+	step = fn {
+		CallInherited()
+
+		if (!GameInFocus()) {
+			return
+		}
+
+		var _i = 0
+		while (_i <= 9) {
+			if (KeyboardCheckPressed(String(_i))) {
+				data.map_seed_text = MapSeedDraftAppend(String(_i))
+			}
+			_i += 1
+		}
+
+		if (MapSeedKeyBackspace()) {
+			data.map_seed_text = MapSeedDraftBackspace()
+		}
+
+		data.map_seed_blink = data.map_seed_blink + 1
+		if (data.map_seed_blink >= 90) {
+			data.map_seed_blink = 0
+		}
+
+		var _shown = ""
+		if (data.map_seed_text == "") {
+			_shown = Translate("ui.map_seed.random_value")
+			seed_label.color = c_grey
+		} else {
+			_shown = MapSeedFormat(data.map_seed_text)
+			if (MapSeedDraftValid()) {
+				seed_label.color = c_yellow
+			} else {
+				seed_label.color = c_red
+			}
+		}
+
+		if (data.map_seed_blink < 45) {
+			_shown = _shown + "_"
+		}
+
+		if (_shown != data.map_seed_shown) {
+			data.map_seed_shown = _shown
+			seed_label.label = _shown
+			// The vertical list centred the label for its old width. Re-anchor
+			// it so growing digits extend to the right instead of shifting left.
+			seed_label.x = 0.5 * seed_label.width
+		}
+	}
+}

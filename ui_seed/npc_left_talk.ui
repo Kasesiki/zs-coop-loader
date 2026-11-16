@@ -1,0 +1,169 @@
+build UiBox {
+	ltrb = [8, 8, "100%", "100%"]
+
+	nextPageDict = {
+		"question":  { 
+			full_screen : 	false,
+			left_frame : 	"ZS_vanilla/ui/npc_left_qna.ui",
+			right_frame : 	"ZS_vanilla/ui/empty.ui",
+		},
+		"task":  { 
+			full_screen : 	false,
+			left_frame : 	"ZS_vanilla/ui/npc_left_quest_selection.ui",
+			right_frame : 	"ZS_vanilla/ui/empty.ui",
+		},
+		"barman_refill":  { 
+			full_screen : 	false,
+			left_frame : 	"ZS_vanilla/ui/npc_left_hunger_thirst.ui",
+			right_frame : 	"ZS_vanilla/ui/empty.ui",
+		},
+		"heal":  { 
+			full_screen : 	false,
+			left_frame : 	"ZS_vanilla/ui/npc_left_heal.ui",
+			right_frame : 	"ZS_vanilla/ui/empty.ui",
+		},
+		"repair_armor":  { 
+			full_screen : 	false,
+			left_frame : 	"ZS_vanilla/ui/npc_left_repair.ui",
+			right_frame : 	"ZS_vanilla/ui/npc_right_repair.ui",
+		},
+		"join_ga":  { 
+			full_screen : 	true,
+			left_frame : 	"ZS_vanilla/ui/npc_join_ga.ui",
+			right_frame : 	"ZS_vanilla/ui/empty.ui",
+		},
+		"join_cc":  { 
+			full_screen : 	true,
+			left_frame : 	"ZS_vanilla/ui/npc_join_cc.ui",
+			right_frame : 	"ZS_vanilla/ui/empty.ui",
+		},
+		"train_skin":  { 
+			full_screen : 	false,
+			left_frame : 	"ZS_vanilla/ui/npc_left_train_skin.ui",
+			right_frame : 	"ZS_vanilla/ui/empty.ui",
+		},
+		"map_seed":  { 
+			full_screen : 	false,
+			left_frame : 	"ZS_vanilla/ui/npc_left_map_seed.ui",
+			right_frame : 	"ZS_vanilla/ui/npc_right_talk.ui",
+		},
+		"cc_spoke_after_port_quest":  { 
+			full_screen : 	false,
+			left_frame : 	"ZS_vanilla/ui/npc_left_unique_dialogue.ui",
+			right_frame : 	"ZS_vanilla/ui/npc_right_unique_dialogue.ui",
+		},
+		"spoke_with_artemovich_after_took_eyes":  { 
+			full_screen : 	false,
+			left_frame : 	"ZS_vanilla/ui/npc_left_unique_dialogue.ui",
+			right_frame : 	"ZS_vanilla/ui/npc_right_unique_dialogue.ui",
+		},
+		"speak_unknown_after_quest_revelations":  { 
+			full_screen : 	false,
+			left_frame : 	"ZS_vanilla/ui/npc_left_unique_dialogue.ui",
+			right_frame : 	"ZS_vanilla/ui/npc_right_unique_dialogue.ui",
+		},
+		"speak_barman_after_machinery":  { 
+			full_screen : 	false,
+			left_frame : 	"ZS_vanilla/ui/npc_left_unique_dialogue.ui",
+			right_frame : 	"ZS_vanilla/ui/npc_right_unique_dialogue.ui",
+		},
+		"speak_barman_horizon_faction":  { 
+			full_screen : 	false,
+			left_frame : 	"ZS_vanilla/ui/npc_left_unique_dialogue.ui",
+			right_frame : 	"ZS_vanilla/ui/npc_right_unique_dialogue.ui",
+		},
+		"speak_with_igor_during_old_man_quest_1":  { 
+			full_screen : 	false,
+			left_frame : 	"ZS_vanilla/ui/npc_left_unique_dialogue.ui",
+			right_frame : 	"ZS_vanilla/ui/npc_right_unique_dialogue.ui",
+		},
+		"speak_with_igor_during_old_man_quest_2":  { 
+			full_screen : 	false,
+			left_frame : 	"ZS_vanilla/ui/npc_left_unique_dialogue.ui",
+			right_frame : 	"ZS_vanilla/ui/npc_right_unique_dialogue.ui",
+		},
+		"give_prologue_letter_to_barman":  { 
+			full_screen : 	false,
+			left_frame : 	"ZS_vanilla/ui/npc_left_unique_dialogue.ui",
+			right_frame : 	"ZS_vanilla/ui/npc_right_unique_dialogue.ui",
+		},
+		
+
+	    "enter_cc_base": undefined,
+	    "cc_take_bunker": undefined,
+	    "ga_risposta_cc_bunker": undefined,
+	}
+
+	LayoutAsVerticalList("left", 0, true)
+
+	var i = 0
+	while(i < NPCDialogueGetPromptCount(data.npc_instance)) {
+
+		build UiToggleButton {
+			font = "font_quest_32px"
+			label = "- " + NPCDialogueGetPrompt(data.npc_instance, i)
+			type = NPCDialogueGetPromptType(data.npc_instance, i)
+			wrap = true
+			wrapWidth = 710 
+			hAlign = "left"
+
+			captureClick = "action"
+			if (type == "back") {
+				captureCast = "back"
+			}
+			click = fn {
+				CallInherited()
+				
+				//Excuse the weird formatting here, Catspeak had a bug in it when this was written
+				
+				// Every dialogue option that has to do some logic has to be put in the else if series
+				
+				if (type == "back") {
+					OnionLayerDeleteCurrent()
+					PlayerStateSetMove()
+				} else {
+					if (type == "free_equipment") {
+						NPCDialogueFreeEquipment()
+					} else {
+						if (type == "choose_map") {
+							if (CanGoToMap())
+							{
+								OnionLayerDeleteCurrent()
+								OnionLayerAddTop("ZS_vanilla/ui/choose_map.ui")
+							}
+						} else {
+							if (type == "go_to_npp") {
+								if (CanGoToMap())
+								{
+									data.map_selected = 9
+									NPCDialogueMapGo()
+								}
+							} else {
+								if (type == "trade") {
+									OnionLayerDeleteCurrent()
+									InventoryTraderOpen(data.npc_instance)
+								} else {
+									var nextPage = parent.nextPageDict[type]
+									if (nextPage == undefined) {
+										PopUpMessage("Prompt type \"" + String(type) + "\" not recognised")
+									} else {
+										if (parent.nextPageDict[type].full_screen == false) {
+											data.dialogue_type = type
+											UiReplace("left frame", parent.nextPageDict[type].left_frame)
+											UiReplace("right frame", parent.nextPageDict[type].right_frame)
+										} else {
+											OnionLayerDeleteCurrent()
+											OnionLayerAddTop(parent.nextPageDict[type].left_frame)
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+
+		i += 1
+	}
+}

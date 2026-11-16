@@ -1,0 +1,11 @@
+04388,npc.interaction.map_seed,"User Interface, interaction with NPC",64,设置地图种子
+04389,ui.map_seed.title,User Interface,64,地图种子
+04390,ui.map_seed.hint,User Interface,512,数字键输入下一张地图的种子（0-4294967295）。退格删除一位，点击“确认种子”保存，留空则使用随机种子。
+04391,ui.map_seed.random_value,User Interface,32,随机
+04392,ui.map_seed.button_random,User Interface,64,随机种子
+04393,ui.map_seed.button_erase,User Interface,64,删除最后一位
+04394,ui.map_seed.button_clear,User Interface,64,清空
+04395,ui.map_seed.button_apply,User Interface,64,确认种子
+04396,ui.map_seed.set,User Interface,128,已设定种子：
+04397,ui.map_seed.random_applied,User Interface,128,已设为随机种子
+04398,ui.map_seed.invalid,User Interface,128,种子必须是 0 到 4294967295 之间的整数

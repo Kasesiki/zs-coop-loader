@@ -7,6 +7,8 @@ use std::env;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
+use crate::config::Settings;
+
 const DEFAULT_EXE: &str = "ZERO Sievert.exe";
 
 #[derive(Debug, Parser)]
@@ -22,10 +24,6 @@ struct Args {
     #[arg(value_name = "游戏EXE", default_value = DEFAULT_EXE)]
     game: PathBuf,
 
-    /// 指定配置文件，默认使用游戏目录下的 coop/coop.conf。
-    #[arg(long, value_name = "路径")]
-    config: Option<PathBuf>,
-
     /// 禁用 LOS 视线缓存；默认启用。
     #[arg(long)]
     no_los_cache: bool,
@@ -35,31 +33,26 @@ struct Args {
     /// 禁用主菜单和静态场景优化；默认启用。
     #[arg(long)]
     no_scene_optimization: bool,
-    /// 禁用异常区域 shader 优化；默认启用，异常粒子保持原样。
+    /// 禁用异常父发射器屏外裁剪；默认启用，保留可见范围内粒子。
     #[arg(long)]
-    no_anomaly_optimization: bool,
+    no_anomaly_emitter_culling: bool,
+    /// 禁用已有的化学、电异常玩家碰撞预筛选；默认启用。
+    #[arg(long)]
+    no_anomaly_collision_prefilter: bool,
+    /// 禁用火焰异常碰撞优化；默认启用，保留粒子和屏外伤害。
+    #[arg(long)]
+    no_anomaly_fire_optimization: bool,
     /// 禁用 GPU 场景优化；默认关闭，因为实验版本会关闭草地风摆动。
     #[arg(long)]
     no_gpu_scene_optimization: bool,
-
-    /// 保留生成的 runtime 目录。
-    #[arg(long, conflicts_with = "no_keep_stage")]
-    keep_stage: bool,
-    /// 游戏处理完成后删除 runtime 目录；默认保留。
-    #[arg(long, conflicts_with = "keep_stage")]
-    no_keep_stage: bool,
 
     /// 只生成优化后的 data.win，不替换游戏文件。
     #[arg(long, conflicts_with = "restore")]
     dry_run: bool,
 
-    /// 使用活动备份恢复游戏 data.win。
+    /// 使用游戏目录下的 data_original_backup.win 恢复 data.win。
     #[arg(long, conflicts_with = "dry_run")]
     restore: bool,
-
-    /// 覆盖配置中的基线 data.win 路径。
-    #[arg(long, value_name = "路径")]
-    base_data_win: Option<PathBuf>,
 }
 
 fn main() -> ExitCode {
@@ -77,40 +70,33 @@ fn run() -> Result<(), String> {
     let game = absolute_path(&args.game)?;
     let game_dir = game.parent().ok_or("游戏路径没有父目录")?;
     let coop_dir = game_dir.join("coop");
-    let config_path = args
-        .config
-        .as_deref()
-        .map(|path| config::resolve_path(path, game_dir))
-        .unwrap_or_else(|| coop_dir.join("coop.conf"));
-    let mut settings = config::load(&config_path, game_dir)?;
+    let mut settings = Settings {
+        los_cache: true,
+        aggressive_visuals: true,
+        scene_optimization: true,
+        anomaly_emitter_culling: true,
+        anomaly_collision_prefilter: true,
+        anomaly_fire_optimization: true,
+        gpu_scene_optimization: false,
+    };
     settings.apply_cli(&args);
 
     let game_data = game_dir.join("data.win");
     if args.restore {
-        backup::restore(&coop_dir, &game_data)?;
+        backup::restore(&game_data)?;
         return Ok(());
     }
+    let original = backup::ensure_original(&game_data)?;
+    let result = pipeline::build(&coop_dir, &original, &settings)?;
 
-    let baseline = settings
-        .base_data_win
-        .as_deref()
-        .map(|path| config::resolve_path(path, game_dir))
-        .unwrap_or_else(|| game_data.clone());
-    let result = pipeline::build(&coop_dir, &baseline, &settings)?;
-
-    println!("生成目录：{}", result.stage.display());
-    println!("基线文件：{}", baseline.display());
+    println!("原始文件：{}", original.display());
     println!("已执行：{}", result.applied.join(", "));
     if args.dry_run {
         println!("dry-run：没有替换游戏 data.win。 ");
         return Ok(());
     }
 
-    backup::replace(&coop_dir, &game_data, &result.output)?;
-    if !settings.keep_stage {
-        std::fs::remove_dir_all(&result.stage)
-            .map_err(|error| format!("清理生成目录失败：{error}"))?;
-    }
+    backup::replace(&game_data, &result.output)?;
     println!("已替换：{}", game_data.display());
     println!("请手动从 Steam 启动游戏；需要恢复时使用 --restore。 ");
     Ok(())

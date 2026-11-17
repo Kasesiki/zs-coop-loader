@@ -1,19 +1,13 @@
 # ZERO Sievert 优化加载器
 
-本项目是一个旨在优化基于Gamemaker引擎使用VM模式的游戏`zero sievert`的性能，提升体验并扩展功能的项目
+本项目是一个对zero sievert进行全面优化与扩展的项目，目前游戏版本为2026/10/27发布版
 
-性能优化项目目录描述
+readme是真人写的，代码是vibe的，有测试与review
 
-项目根目录为一个rust项目，src存放rust代码，tool目录存放提取，编译与反编译gamemaker游戏的工具`utmt`和`data-win-extracor`，analysis目录是较重点部分
+代码组成结构,analysis文件夹负责存放优化方面内容,optimization存放优化用csx脚本
 
-整体项目目前使用utmt反编译出gml文件，并使用csx与utmt交互魔改data.win文件并覆盖到游戏目录的data.win达到魔改效果，并不依赖游戏本身的模组
+rust作为加载器，负责调用utmt（[UndertaleModTool](https://github.com/UnderminersTeam/UndertaleModTool)）进行在线的反编译与data.win的魔改
 
-analysis目录中，optimization目录负责存放编写优化代码的csx文件，而utmt_export_1027则存放了游戏全量导出的gml
+程序本身会嵌入csx,csv,ui文件，tool需要外部引用
 
-此外，在游戏根目录，有一个只读文件`data_original_backup.win`, 工具使用这个文件作为基础进行魔改并覆盖到data.win，而这个文件本身却不进行改变以保证完整性
-
-关于性能优化的部分，可以参阅analysis/static_hotspots.md，查看以往ai分析的性能热点，并在进行优化时同步更新文件，README.md不该轻易修改，有需要改变的地方直接通知用户
-
-git版本管理由用户负责管理，负责在出现问题时由用户review和处理，所以不要动git版本树
-
-执行复杂任务可以考虑搜索插件与mcp, 活用dshfind
+更多的后续写，想要使用交给ai看源码编译使用，优化部分参考analysis/static_hotspots.md

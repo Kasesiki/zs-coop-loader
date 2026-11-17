@@ -1,6 +1,76 @@
 # ZERO Sievert 优化报告
 
-## 本轮补充：火焰红光、长寿命粒子与 AI 分帧
+## 本轮：UI/CSV 内嵌、外部 UTMT 与代码整合
+
+用户已废弃 NPC Step 的摄像机外巡逻分帧（视野外敌人也是威胁），并把团队扫描的
+分帧下限从 12 调到 4（实测 3-4 个 NPC 就开始卡顿）。本轮不再改变 NPC 行为，只
+保留 `ai_team_step` 的协调扫描分帧，并把 NPC 计数改为每帧缓存一次。
+
+### 资源嵌入与外部 UTMT
+
+`build.rs` 现在生成两类编译期资源：
+
+- `analysis/optimization/*.csx` 嵌成字符串；
+- `ui_seed/*.ui` 与 `*.csv` 嵌成字节。
+
+UTMT 不嵌入。它体积大，解压缓存并不比直接保留目录更轻，所以启动时仍从
+`coop/tool/utmt/UndertaleModCli` 外部调用；缺失时直接报错，不再尝试释放归档。
+加载器因此只有约 1.3 MB，CSX 与 UI 仍可随二进制一起分发。
+
+### UI 与语言文件自动部署
+
+- `npc_left_map_seed.ui` 内容不同才重写；
+- `npc_left_talk.ui` 已有 `"map_seed"` 条目时完全不动，缺少时在 `nextPageDict`
+  的闭合花括号前插入；找不到该结构就报错并停止替换 `data.win`；
+- 语言 CSV 只维护 `npc.interaction.map_seed` 与 `ui.map_seed.*` 命名空间：
+  先移除旧行，再按内嵌快照写回，因此历史 `cat >>` 留下的重复行会被清掉，其它
+  Descriptor 原样保留；
+- 部署发生在 `data.win` 替换之前；`--dry-run` 不修改 UI/CSV。
+
+同时修复了一个实际断点：游戏目录里的 `npc_left_map_seed.ui` 会调用
+`MapSeedFormat`，但上一版 `data.win` 没有这个函数。现在 `apply_conductor_seed.csx`
+新增并注册 `MapSeedFormat`，按三位分组显示种子。
+
+### Rust 与 CSX 整理
+
+Rust：
+
+- `Settings::default()` 统一默认值，`Settings` 与 `main` 不再各写一份；
+- 补丁表用 `Feature` 枚举决定是否启用，新增补丁只改一处；
+- 删除 `bool_literal`、`absolute_path` 等小包装；
+- 修复 dry-run 逻辑：旧的 `BuildResult::Drop` 会在返回时删掉 `data.win.coop-tmp`，
+  实际什么也检查不到；现在 dry-run 保留 `data.win.coop-dry-run`；
+- 构建、部署或替换失败时清理临时输出；
+- `--no-gpu-scene-optimization` 这个永远无效的开关改成
+  `--gpu-scene-optimization`（默认关闭，显式启用）。
+
+CSX：
+
+- `map_seed_pending_text` 展开进 `map_seed_draft_begin`，`map_seed_draft_commit`
+  不再重复调用 `map_seed_draft_valid`；
+- 火焰 type 14 的数量改为 `min(c.particle_fire_amount, 2)`，低画质设置不会被
+  反向加回；
+- 异常父发射器先执行 `scr_chance` 再判断可见性，保持原全局随机序列；
+- 异常子实例的摄像机值按 `current_time div 16` 加房间号缓存，避免 95+ 个子实例
+  每帧各调用四次 `camera_get_view_*`；最多一帧陈旧，裁剪 margin 足以吸收；
+- AI 团队扫描门控保留 2 帧（NPC ≥ 30 时 3 帧），下限 4 个 NPC；
+- AI 分帧的相位计算改用 `arg0` 而不是 `arg0.id`。UTMT 会把 `arg0.id` 编译成
+  “对数字做成员访问”，运行时报 `DoAdd :1: Malformed variable`；`arg0` 本身就是
+  实例 id，直接相加即可。NPC 计数仍按帧 + 房间缓存。
+
+### 验证
+
+- `cargo test --release --offline`：9 个测试通过，覆盖真实对话 UI 的注入、CSV 去重/
+  幂等、补丁表唯一性和备份恢复；
+- `cargo clippy --release --offline -- -D warnings` 通过；
+- dry-run 仍包含全部 12 个默认补丁，并保留生成文件；
+- 反编译确认 AI 计数缓存、4 NPC 下限、`MapSeedFormat` 注册、异常子实例摄像机
+  缓存、type 14 `min`、父发射器 RNG 顺序都正确；
+- 反汇编确认 AI 相位相加直接使用 `argument0`，不再生成 `[stacktop]self.id`
+  的成员访问；
+- dry-run 在外部 `coop/tool/utmt` 下完成，缺失 UTMT 时会直接报错。
+
+## 上一轮：火焰红光、长寿命粒子与 AI 分帧
 
 用户实测：摄像机外裁剪收益不明显。真正的掉帧发生在玩家进入火焰异常范围时，
 即使没有碰到伤害火焰也会明显下降；同时摄像机内 AI 较多时单核 CPU 占用集中。
@@ -47,11 +117,11 @@ VM 的对象、实例和 GC 做同步，风险和工程量都远超当前加载�
 
 - `ai_team_step` 是每个 NPC 每帧执行的 O(N) 接触/换弹/附近单位扫描；NPC 多时
   整体接近 O(N²)，是摄像机内 AI 密集时的明显热点。
-- 在 `ai_human_dispatch` 的调用点增加分帧门控：NPC 数达到 12 时每个 NPC 的团队
-  扫描分摊到 2 帧，达到 30 时分摊到 3 帧，按实例 id 错开；
-- NPC 少于 12 时完全保持原频率；
-- 对摄像机外且没有有效战斗目标的巡逻 NPC，`ai_human_dispatch` 改为隔帧执行；
-  摄像机内 NPC、已有目标的战斗 NPC 仍保持每帧更新；
+- 在 `ai_human_dispatch` 的调用点增加分帧门控：用户把下限调到 4 个 NPC 后，
+  从第 4 个 NPC 开始把团队扫描分摊到 2 帧，达到 30 个时 3 帧，按实例 id 错开；
+- NPC 少于 4 时完全保持原频率；
+- 用户已明确废弃“摄像机外巡逻 NPC 隔帧”的行为：视野外敌人也是威胁，当前实现
+  不检查摄像机，也不跳过任何 NPC 的 dispatch；
 - 团队调度只跳过协调扫描，不跳过移动、战斗、感知、行为树和动画。
 
 这会把单帧的 AI 尖峰摊平并减少总的主线程工作量，但不会让游戏使用更多核心；
@@ -66,8 +136,8 @@ VM 的对象、实例和 GC 做同步，风险和工程量都远超当前加载�
 边界：
 
 - NPC 较多时，队友之间的接触/换弹信息最多晚 1-2 帧到达；
-- 摄像机外的巡逻 AI 以约 30 Hz 更新，移动/巡逻动画可能比 60 Hz 略粗；摄像机内
-  或已进入战斗的 NPC 不受影响；
+- 所有 NPC（包括摄像机外）仍按原频率执行移动、感知和战斗，只是团队协调扫描
+  被分摊；
 - 火焰红光会变短、变淡、范围变小，余烬数量减少；如果更喜欢原版浓雾，用
   `--no-anomaly-fire-visuals`；
 - 当前没有运行时 profiler，收益仍需游戏内 F11/外部监控对比。
@@ -78,7 +148,7 @@ VM 的对象、实例和 GC 做同步，风险和工程量都远超当前加载�
 - 反编译确认 type 15/14 的寿命、尺寸和数量按表修改，`type 13` 保持原值；
 - 确认 `wraith_fire` / `wraith_fire_dead` 光照参数修改，没有删除光照；
 - 确认 `ai_team_step` 门控位于 `ai_human_dispatch` 内，移动/战斗调用未被包裹；
-- 确认 NPC Step 的摄像机外巡逻门控只在没有有效战斗目标时生效；
+- 确认 NPC Step 已移除摄像机外巡逻门控；
 - 默认 dry-run 包含“火焰异常视觉降载”和“AI 分帧调度”；两个 `--no-*` 开关能
   分别移除对应补丁。
 
@@ -199,7 +269,7 @@ shader。它是独立实验，收益需要实测，不能声称已解决 GPU 瓶
 - 首次优化时若不存在，复制当前 `data.win`；存在则不覆盖内容，并设置只读权限。
 - 每次都从它读取，保证参数切换不会叠加上次补丁。
 - 一次 UTMT 进程执行全部启用脚本，只写一份临时输出；成功后替换 `data.win`。
-- 失败或 dry-run 时删除临时输出；不创建 runtime、时间戳或多份备份。
+- 失败时删除临时输出；dry-run 保留 `data.win.coop-dry-run`；UTMT 从 `coop/tool/utmt` 外部调用。
 - `--restore` 复制固定原始文件回 `data.win`，不会删除原始文件。
 - 移除 `--keep-stage`、`--no-keep-stage`、`--base-data-win` 及其配置。
 
@@ -237,13 +307,13 @@ ZS_vanilla/ui/npc_left_map_seed.ui                    新页面
 ZS_vanilla/ui/npc_left_talk.ui                        页面注册
 ZS_vanilla/languages/english/english.csv              英文文案
 ZS_vanilla/languages/chinese_simplified/chinese_simplified.csv  中文文案
-coop/ui_seed/                                         松散文件快照与重新部署说明
+coop/ui_seed/                                         内嵌 UI/CSV 快照，加载器自动部署
 ```
 
 边界与行为：
 
-- `.ui` 和语言 CSV 是游戏目录中的松散文件，不写入 `data.win`；游戏更新覆盖这些
-  文件后需要重新应用。其它语言没有新增文案时会回退到英文。
+- `.ui` 和语言 CSV 不写入 `data.win`，但已嵌入加载器并在替换前自动部署；游戏
+  更新覆盖这些文件后，下次运行加载器会补齐。其它语言没有新增文案时会回退到英文。
 - 种子页面没有把 Backspace 绑定为“返回”，因此 Backspace 在该页用于删除一位数字；
   要回到列车长对话请点击“返回”，Escape 仍会关闭整个对话。
 - 确认后的种子作用于下一次生成的地图。若确认后不乘车直接离开对话，种子仍会保留
@@ -266,8 +336,8 @@ UTMT 能编译新增的 GML，反编译 `npc_dialogue_map_go`、`lista_text`、
 种子消费逻辑均保持完整。UI 页面无法在当前环境启动游戏窗口验证，需要在游戏内
 实际打开列车长对话检查排版与输入。
 
-当前已写入游戏的 `data.win`：375867928 字节，
-SHA-256 `b1e3e1915b56b4f966b3c328ecd18a09c82ddd2318cf83c082b78b42078a45ee`。
+当前已写入游戏的 `data.win`：375869464 字节，
+SHA-256 `b65ca83a1c30e0ec59c44078198ea8e8d1eecffcbbeaddd67dc3030aaefd7b12`。
 原始备份仍为 `95252ac0...a7a7daa`，未改动。
 
 ## 编译期嵌入 csx
@@ -289,7 +359,8 @@ coop/src/pipeline.rs              Spec 直接持有嵌入的源码；运行时�
 - UTMT CLI 只接受脚本路径，因此启用补丁时仍会把源码写到
   `$TMPDIR/zs-coop-scripts-<pid>-<nanos>/`，命令结束后由 `Drop` 删除；失败路径
   同样会清理。
-- 外部依赖只剩 `tool/utmt/UndertaleModCli`，本次移除的是对 csx 文件的运行期依赖。
+- 本次先移除了对 csx 文件的运行期依赖；本轮进一步把 UI 和 CSV 也嵌入二进制，
+  UTMT 仍保持外部引用，见顶部“资源嵌入与外部 UTMT”。
 
 验证（隐藏脚本目录后仍能生成全部补丁）：
 

@@ -65,7 +65,7 @@ importGroup.QueueFindReplace(fireStep,
 {
     var a = UnknownEnum.Value_14;
     var c = obj_particles_controller;
-    part_particles_create(c.particles_system[a], x, y, c.particles_type[a], 2);
+    part_particles_create(c.particles_system[a], x, y, c.particles_type[a], min(c.particle_fire_amount, 2));
 }",
     true);
 

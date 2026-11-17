@@ -1,3 +1,0 @@
-function lista_idee()
-{
-}

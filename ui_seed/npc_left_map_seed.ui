@@ -60,7 +60,7 @@ build UiBox {
 				PopUpMessage(Translate("ui.map_seed.invalid"))
 			} else {
 				if (_result != "random") {
-					PopUpMessage(Translate("ui.map_seed.set") + " " + MapSeedDraftGet())
+					PopUpMessage(Translate("ui.map_seed.set") + " " + MapSeedFormat(MapSeedDraftGet()))
 				}
 				UiReplace("left frame", "ZS_vanilla/ui/npc_left_talk.ui")
 			}
@@ -96,8 +96,12 @@ build UiBox {
 			_shown = Translate("ui.map_seed.random_value")
 			seed_label.color = c_grey
 		} else {
-			seed_label.color = c_yellow
-			_shown = data.map_seed_text
+			_shown = MapSeedFormat(data.map_seed_text)
+			if (MapSeedDraftValid()) {
+				seed_label.color = c_yellow
+			} else {
+				seed_label.color = c_red
+			}
 		}
 
 		if (data.map_seed_blink < 45) {

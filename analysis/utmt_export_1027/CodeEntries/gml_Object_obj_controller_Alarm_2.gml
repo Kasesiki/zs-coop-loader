@@ -1,1 +1,0 @@
-disattiva = true;

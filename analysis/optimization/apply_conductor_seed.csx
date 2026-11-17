@@ -50,19 +50,33 @@ importGroup.QueueFindReplace(dialogueText,
 // below; the page itself only renders and routes input.
 importGroup.QueueFindReplace(dialogueMapGo,
     "function npc_dialogue_map_is_unlocked(arg0 = uiGetData().map_selected)",
-    @"function map_seed_pending_text()
+    @"function map_seed_draft_begin()
 {
     if (variable_global_exists(""map_seed_override"") && global.map_seed_override != undefined)
     {
-        return string(global.map_seed_override);
+        global.map_seed_draft = string(global.map_seed_override);
     }
-    return """";
+    else
+    {
+        global.map_seed_draft = """";
+    }
+    return global.map_seed_draft;
 }
 
-function map_seed_draft_begin()
+function map_seed_format(arg0)
 {
-    global.map_seed_draft = map_seed_pending_text();
-    return global.map_seed_draft;
+    var _text = string(arg0);
+    var _out = """";
+    var _length = string_length(_text);
+    for (var _i = 1; _i <= _length; _i++)
+    {
+        if (_i > 1 && ((_length - _i + 1) mod 3) == 0)
+        {
+            _out += "" "";
+        }
+        _out += string_char_at(_text, _i);
+    }
+    return _out;
 }
 
 function map_seed_draft_get()
@@ -133,7 +147,7 @@ function map_seed_draft_commit()
         global.map_seed_override = undefined;
         return ""random"";
     }
-    if (!map_seed_draft_valid())
+    if (string_digits(_text) != _text || string_length(_text) > 10 || real(_text) > 4294967295)
     {
         return ""invalid"";
     }
@@ -150,7 +164,7 @@ function npc_dialogue_map_is_unlocked(arg0 = uiGetData().map_selected)",
 // by UTMT, so keep each addGlobalFunction call around the game's own size.
 importGroup.QueueFindReplace(uiFunctions,
     @"    uiCatspeakGetEnvironment().addGlobalFunction(""NPCDialogueHealRad"", npc_dialogue_heal_rad, ""NPCDialogueFreeEquipment"",",
-    @"    uiCatspeakGetEnvironment().addGlobalFunction(""MapSeedDraftBegin"", map_seed_draft_begin, ""MapSeedDraftGet"", map_seed_draft_get, ""MapSeedDraftAppend"", map_seed_draft_append);
+    @"    uiCatspeakGetEnvironment().addGlobalFunction(""MapSeedDraftBegin"", map_seed_draft_begin, ""MapSeedDraftGet"", map_seed_draft_get, ""MapSeedDraftAppend"", map_seed_draft_append, ""MapSeedFormat"", map_seed_format);
     uiCatspeakGetEnvironment().addGlobalFunction(""MapSeedDraftBackspace"", map_seed_draft_backspace, ""MapSeedDraftClear"", map_seed_draft_clear, ""MapSeedDraftValid"", map_seed_draft_valid);
     uiCatspeakGetEnvironment().addGlobalFunction(""MapSeedDraftCommit"", map_seed_draft_commit, ""MapSeedKeyBackspace"", function() { return keyboard_check_pressed(vk_backspace); });
     uiCatspeakGetEnvironment().addGlobalFunction(""NPCDialogueHealRad"", npc_dialogue_heal_rad, ""NPCDialogueFreeEquipment"",",

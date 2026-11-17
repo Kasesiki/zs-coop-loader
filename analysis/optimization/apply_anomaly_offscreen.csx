@@ -34,15 +34,35 @@ UndertaleCode anomalyEnemyElectric = RequireCode("gml_Object_obj_enemy_anomaly_e
 // margin. The margin scales with the camera width so it stays correct at other
 // view sizes. Inside the margin the original collision, damage and activation
 // logic runs unchanged, including damage to NPCs that are just off-screen.
-const string CameraGuard = @"
+//
+// Camera values are cached per 16 ms bucket in globals: before this, every one
+// of the 95+ anomaly children called four camera_get_view_* builtins each
+// frame. The cache is one frame stale at most and the culling margin absorbs it.
+const string CameraCache = @"
+    var _coop_now = current_time div 16;
+    if (!variable_global_exists(""coop_camera_frame"") || global.coop_camera_frame != _coop_now || global.coop_camera_room != room)
+    {
+        global.coop_camera_frame = _coop_now;
+        global.coop_camera_room = room;
+        global.coop_camera_x = camera_get_view_x(view_camera[0]);
+        global.coop_camera_y = camera_get_view_y(view_camera[0]);
+        global.coop_camera_w = camera_get_view_width(view_camera[0]);
+        global.coop_camera_h = camera_get_view_height(view_camera[0]);
+    }
+    var _coop_camx = global.coop_camera_x;
+    var _coop_camy = global.coop_camera_y;
+    var _coop_camw = global.coop_camera_w;
+    var _coop_camh = global.coop_camera_h;
+";
+
+string CameraGuard(string minimum, string factor)
+{
+    return @"
 var _coop_draw_particles = true;
 if (view_camera[0] != -1)
 {
-    var _coop_camx = camera_get_view_x(view_camera[0]);
-    var _coop_camy = camera_get_view_y(view_camera[0]);
-    var _coop_camw = camera_get_view_width(view_camera[0]);
-    var _coop_camh = camera_get_view_height(view_camera[0]);
-    var _coop_margin = max(96, _coop_camw * 0.25);
+" + CameraCache + @"
+    var _coop_margin = max(" + minimum + @", _coop_camw * " + factor + @");
     if (x < _coop_camx - _coop_margin || x > _coop_camx + _coop_camw + _coop_margin || y < _coop_camy - _coop_margin || y > _coop_camy + _coop_camh + _coop_margin)
     {
         exit;
@@ -50,10 +70,23 @@ if (view_camera[0] != -1)
     _coop_draw_particles = x >= _coop_camx - 64 && x <= _coop_camx + _coop_camw + 64 && y >= _coop_camy - 64 && y <= _coop_camy + _coop_camh + 64;
 }
 ";
+}
+
+string ParticleVisibility()
+{
+    return @"
+var _coop_draw_particles = true;
+if (view_camera[0] != -1)
+{
+" + CameraCache + @"
+    _coop_draw_particles = x >= _coop_camx - 64 && x <= _coop_camx + _coop_camw + 64 && y >= _coop_camy - 64 && y <= _coop_camy + _coop_camh + 64;
+}
+";
+}
 
 foreach (UndertaleCode code in new[] { fireStep, gasStep, electricStep })
 {
-    importGroup.QueuePrepend(code, CameraGuard);
+    importGroup.QueuePrepend(code, CameraGuard("96", "0.25"));
 }
 
 // Particles are only visible inside the view. Instances between the view edge
@@ -96,22 +129,7 @@ importGroup.QueueFindReplace(electricStep,
 // up to 96-pixel spark paths. Its Step does not manage the looped emitter
 // sound, so skipping it off-screen only skips particles, lights and damage
 // checks that cannot be seen or reached from the view.
-importGroup.QueuePrepend(electricGenerator, @"
-var _coop_draw_particles = true;
-if (view_camera[0] != -1)
-{
-    var _coop_camx = camera_get_view_x(view_camera[0]);
-    var _coop_camy = camera_get_view_y(view_camera[0]);
-    var _coop_camw = camera_get_view_width(view_camera[0]);
-    var _coop_camh = camera_get_view_height(view_camera[0]);
-    var _coop_margin = max(160, _coop_camw * 0.33);
-    if (x < _coop_camx - _coop_margin || x > _coop_camx + _coop_camw + _coop_margin || y < _coop_camy - _coop_margin || y > _coop_camy + _coop_camh + _coop_margin)
-    {
-        exit;
-    }
-    _coop_draw_particles = x >= _coop_camx - 64 && x <= _coop_camx + _coop_camw + 64 && y >= _coop_camy - 64 && y <= _coop_camy + _coop_camh + 64;
-}
-");
+importGroup.QueuePrepend(electricGenerator, CameraGuard("160", "0.33"));
 importGroup.QueueFindReplace(electricGenerator,
     "if (scr_chance(100))\n{\n    if (instance_exists(obj_particles_controller))",
     "if (scr_chance(100) && _coop_draw_particles)\n{\n    if (instance_exists(obj_particles_controller))",
@@ -120,19 +138,8 @@ importGroup.QueueFindReplace(electricGenerator,
 // Anomaly wraiths emit their body particles every Step while their AI keeps
 // running. The AI must not be culled, but the particle bursts are invisible
 // outside the view, so only those are gated.
-const string ParticleVisibility = @"
-var _coop_draw_particles = true;
-if (view_camera[0] != -1)
-{
-    var _coop_camx = camera_get_view_x(view_camera[0]);
-    var _coop_camy = camera_get_view_y(view_camera[0]);
-    var _coop_camw = camera_get_view_width(view_camera[0]);
-    var _coop_camh = camera_get_view_height(view_camera[0]);
-    _coop_draw_particles = x >= _coop_camx - 64 && x <= _coop_camx + _coop_camw + 64 && y >= _coop_camy - 64 && y <= _coop_camy + _coop_camh + 64;
-}
-";
-importGroup.QueuePrepend(anomalyEnemyFire, ParticleVisibility);
-importGroup.QueuePrepend(anomalyEnemyElectric, ParticleVisibility);
+importGroup.QueuePrepend(anomalyEnemyFire, ParticleVisibility());
+importGroup.QueuePrepend(anomalyEnemyElectric, ParticleVisibility());
 importGroup.QueueFindReplace(anomalyEnemyFire,
     "part_emitter_burst(ob.particles_system[a], ob.partciles_emitter[a], ob.particles_type[a], ob.particle_amount[a]);",
     "if (_coop_draw_particles) { part_emitter_burst(ob.particles_system[a], ob.partciles_emitter[a], ob.particles_type[a], ob.particle_amount[a]); }",
@@ -143,4 +150,4 @@ importGroup.QueueFindReplace(anomalyEnemyElectric,
     true);
 
 importGroup.Import();
-ScriptMessage("Applied anomaly off-screen culling and particle visibility gating.");
+ScriptMessage("Applied anomaly off-screen culling with cached camera and particle visibility gating.");

@@ -1,3 +1,0 @@
-function outline_doc()
-{
-}

@@ -121,8 +121,8 @@ UTMT 能编译新增的 GML，反编译 `npc_dialogue_map_go`、`lista_text`、
 种子消费逻辑均保持完整。UI 页面无法在当前环境启动游戏窗口验证，需要在游戏内
 实际打开列车长对话检查排版与输入。
 
-当前已写入游戏的 `data.win`：375862552 字节，
-SHA-256 `df6c43148b7e59a813dd69874609aa6b0310b5b286a5af2ace45ecff1469baac`。
+当前已写入游戏的 `data.win`：375862680 字节，
+SHA-256 `d2275a992c5c98b4a6a942b8e461f3e37c21acb79ab3d78dffd12bfba5b73212`。
 原始备份仍为 `95252ac0...a7a7daa`，未改动。
 
 ## 编译期嵌入 csx
@@ -157,7 +157,7 @@ mv analysis/optimization.hidden analysis/optimization
 
 ## 后台低帧率
 
-目标：窗口失去焦点时把帧率降到 10 FPS，降低 GPU 和 CPU 占用；重新获得焦点后恢复。
+目标：窗口失去焦点时把帧率降到 5 FPS，降低 GPU 和 CPU 占用；重新获得焦点后恢复。
 
 实现文件：`coop/analysis/optimization/apply_background_fps.csx`，修改
 `gml_Object_obj_cursor_Step_1`（Begin Step）。
@@ -173,17 +173,17 @@ mv analysis/optimization.hidden analysis/optimization
 行为：
 
 - logo 画面（`obj_logo_screen` 存在）不降帧，避免启动和加载被拖慢；
-- 失焦时记录当前帧率（例如调试菜单的“Unlock framerate”可能设为 1000），再设为 10；
-- 如果失焦期间切换房间导致帧率被重置，下一帧会重新降回 10；
+- 失焦时记录当前帧率（例如调试菜单的“Unlock framerate”可能设为 1000），再设为 5；
+- 如果失焦期间切换房间导致帧率被重置，下一帧会重新降回 5；
 - 重新获得焦点后恢复记录的帧率；
 - 命令行 `--no-background-fps` 可以完全关闭该补丁。
 
 边界与代价：
 
 - 降帧会同时降低逻辑步进频率，所有按步计算的计时（alarm、冷却、移动、动画）
-  在后台会慢 6 倍；用 `room_speed * 秒数` 计算的旧计时器会被拉长。这是“后台
+  在后台会慢 12 倍；用 `room_speed * 秒数` 计算的旧计时器会被拉长。这是“后台
   低帧率”本身的语义，不是补丁额外引入的。
-- 音频线程不受影响；重新获得焦点后约 100 毫秒内恢复，输入延迟只影响刚切回的一瞬。
+- 音频线程不受影响；5 FPS 下重新获得焦点后最多约 200 毫秒恢复，输入延迟只影响刚切回的一瞬。
 - 没有采用 `sleep()`：它会阻塞音频和窗口事件；也没有只关闭绘制：那样 CPU
   仍然跑满。`game_set_speed` 是游戏已经使用的运行时接口（调试菜单的
   “Unlock framerate”就调用它），风险最小。
@@ -195,8 +195,59 @@ mv analysis/optimization.hidden analysis/optimization
 - `cargo test --release --offline` 通过；
 - 隐藏 `analysis/optimization` 后 dry-run 通过；
 - 已写入并反编译确认 `obj_cursor_Step_1` 开头是降帧逻辑，原有光标逻辑完整保留；
-- 游戏内可通过 F11 打开帧率显示，切到后台应看到帧率降到约 10，切回后恢复。
+- 游戏内可通过 F11 打开帧率显示，切到后台应看到帧率降到约 5，切回后恢复。
   当前环境无法启动游戏窗口，这一步需要人工确认。
 
-当前 `data.win`：375862296 字节，
-SHA-256 `b30f7f5ea433d4bcf7975471a8cf34845908a7b8c34a5e582785c744ffea5558`。
+## 菜单静态背景
+
+调查结论：主菜单和暂停菜单共用 `ZS_vanilla/ui/mm_root.ui`，其中最底层是一个
+`UiVideo`，`source = "ZS_menu.mp4"`。`uiClassVideo` 的 Draw 回调每帧调用
+`video_draw()` 解码并绘制整张 1920x1080 视频；暂停时 `game_pause()` 在当前房间
+创建 `obj_main_menu`，仍然会加载同一个 `mm_root.ui`。所以暂停界面背后不是一张
+静态图，而是持续解码的视频。这就是这两个界面主要的动态 CPU/GPU 开销。
+
+游戏本身已经为无法播放视频的情况准备了 `spr_videoreplacement_mainmenu`
+（1920x1080，单帧静态图），`uiClassVideo` 在视频不可用或 Steam Deck 上本来就会
+画它。补丁直接复用这条现成的回退路径：
+
+- 在 `gml_GlobalScript_uiClassVideo` 的 Draw 回调开头加一个条件分支；
+- 命中静态模式时，第一次关闭视频（`video_close()`），之后只画
+  `spr_videoreplacement_mainmenu`，不再调用 `video_draw()`；
+- 用一个实例变量记录“已经关闭过”，避免每帧重复调用 `video_close()`；
+- 分支只做一次 `room` 比较和一次整数/布尔判断，没有新增对象、循环或额外纹理。
+
+开关：
+
+```bash
+# 默认：主菜单和暂停菜单都使用静态背景
+./target/release/zs-coop-loader "../ZERO Sievert.exe"
+
+# 主菜单保留动态视频，暂停菜单仍静态
+./target/release/zs-coop-loader "../ZERO Sievert.exe" --menu-video
+
+# 暂停菜单保留动态视频，主菜单仍静态
+./target/release/zs-coop-loader "../ZERO Sievert.exe" --pause-video
+
+# 两个都保留动态视频（等价于不打这个补丁）
+./target/release/zs-coop-loader "../ZERO Sievert.exe" --menu-video --pause-video
+```
+
+代价：
+
+- 主菜单和暂停菜单的背景从视频变成静态 key art，这是可见的画面变化；需要原视频
+  时用上面的 `--menu-video` / `--pause-video` 重新生成；
+- 静态图是游戏自带的 Steam Deck 回退图，分辨率与视频一致，不需要新增资源；
+- 进入游戏、退出到主菜单、暂停/恢复时，UI 元素会正常创建和销毁，视频会在离开
+  静态模式后按原有队列逻辑重新打开。
+
+验证：
+
+- 默认 dry-run 的已执行列表包含“菜单静态背景”；同时加
+  `--menu-video --pause-video` 时该补丁被跳过；
+- 已写入并反编译确认 `uiClassVideo` 的 Draw 回调开头是静态分支，后面的
+  `video_draw()` 原逻辑完整保留；
+- 之前的 `obj_cursor` 降帧、`lista_text` 种子对话等补丁仍然存在；
+- 当前环境无法启动游戏窗口，静态背景的实际观感需要在游戏内确认。
+
+当前 `data.win`：375862680 字节，
+SHA-256 `d2275a992c5c98b4a6a942b8e461f3e37c21acb79ab3d78dffd12bfba5b73212`。

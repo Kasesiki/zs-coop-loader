@@ -38,7 +38,7 @@ impl Drop for ScriptFiles {
     }
 }
 
-fn materialize(specs: &[&Spec]) -> Result<ScriptFiles, String> {
+fn materialize(specs: &[&Spec], settings: &Settings) -> Result<ScriptFiles, String> {
     let stamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|elapsed| elapsed.as_nanos())
@@ -53,7 +53,7 @@ fn materialize(specs: &[&Spec]) -> Result<ScriptFiles, String> {
     };
     for spec in specs {
         let path = files.dir.join(spec.name);
-        fs::write(&path, spec.source)
+        fs::write(&path, render_source(spec, settings))
             .map_err(|error| format!("无法写入临时脚本 {}：{error}", path.display()))?;
         files.paths.push(path);
     }
@@ -90,7 +90,7 @@ pub fn build(coop_dir: &Path, original: &Path, settings: &Settings) -> Result<Bu
     if enabled.is_empty() {
         fs::copy(original, &result.output).map_err(|error| format!("复制原始备份失败：{error}"))?;
     } else {
-        let files = materialize(&enabled)?;
+        let files = materialize(&enabled, settings)?;
         let mut command = Command::new(&utmt);
         command.current_dir(coop_dir).arg("load").arg(original);
         for path in &files.paths {
@@ -109,7 +109,7 @@ pub fn build(coop_dir: &Path, original: &Path, settings: &Settings) -> Result<Bu
     Ok(result)
 }
 
-fn specs(settings: &Settings) -> [Spec; 9] {
+fn specs(settings: &Settings) -> [Spec; 10] {
     [
         Spec {
             enabled: settings.los_cache,
@@ -165,7 +165,27 @@ fn specs(settings: &Settings) -> [Spec; 9] {
             source: scripts::apply_gpu_scene,
             label: "GPU 场景优化",
         },
+        Spec {
+            enabled: settings.static_menu_background || settings.static_pause_background,
+            name: "apply_menu_background.csx",
+            source: scripts::apply_menu_background,
+            label: "菜单静态背景",
+        },
     ]
+}
+
+/// 把编译期嵌入的脚本里的开关占位符替换成本次运行的配置。
+/// 这样同一个 csx 可以服务“仅暂停静态”“仅主菜单静态”“全部静态”等模式。
+fn render_source(spec: &Spec, settings: &Settings) -> String {
+    let menu = bool_literal(settings.static_menu_background);
+    let pause = bool_literal(settings.static_pause_background);
+    spec.source
+        .replace("@@COOP_STATIC_MENU@@", menu)
+        .replace("@@COOP_STATIC_PAUSE@@", pause)
+}
+
+fn bool_literal(value: bool) -> &'static str {
+    if value { "true" } else { "false" }
 }
 
 #[cfg(test)]
@@ -178,5 +198,21 @@ mod tests {
             assert!(!spec.source.is_empty(), "{} 的脚本为空", spec.name);
             assert!(spec.name.ends_with(".csx"));
         }
+    }
+
+    #[test]
+    fn menu_background_script_is_rendered_from_settings() {
+        let mut settings = Settings::default();
+        settings.static_menu_background = true;
+        settings.static_pause_background = false;
+        let specs = specs(&settings);
+        let spec = specs
+            .iter()
+            .find(|spec| spec.name == "apply_menu_background.csx")
+            .expect("菜单背景脚本缺失");
+        let rendered = render_source(spec, &settings);
+        assert!(!rendered.contains("@@COOP_STATIC_"));
+        assert!(rendered.contains("true && room == r_menu"));
+        assert!(rendered.contains("false && room != r_menu"));
     }
 }

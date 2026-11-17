@@ -46,9 +46,15 @@ struct Args {
     /// 禁用 GPU 场景优化；默认关闭，因为实验版本会关闭草地风摆动。
     #[arg(long)]
     no_gpu_scene_optimization: bool,
-    /// 禁用后台低帧率；默认启用，窗口失去焦点时降到 10 FPS。
+    /// 禁用后台低帧率；默认启用，窗口失去焦点时降到 5 FPS。
     #[arg(long)]
     no_background_fps: bool,
+    /// 主菜单保留动态视频背景；默认使用静态背景图以降低 CPU/GPU 占用。
+    #[arg(long)]
+    menu_video: bool,
+    /// 暂停菜单保留动态视频背景；默认使用静态背景图以降低 CPU/GPU 占用。
+    #[arg(long)]
+    pause_video: bool,
 
     /// 只生成优化后的 data.win，不替换游戏文件。
     #[arg(long, conflicts_with = "restore")]
@@ -83,6 +89,8 @@ fn run() -> Result<(), String> {
         anomaly_fire_optimization: true,
         gpu_scene_optimization: false,
         background_fps: true,
+        static_menu_background: true,
+        static_pause_background: true,
     };
     settings.apply_cli(&args);
 

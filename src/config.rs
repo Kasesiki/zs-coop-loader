@@ -10,6 +10,8 @@ pub struct Settings {
     pub anomaly_fire_optimization: bool,
     pub gpu_scene_optimization: bool,
     pub background_fps: bool,
+    pub static_menu_background: bool,
+    pub static_pause_background: bool,
 }
 
 impl Settings {
@@ -37,6 +39,12 @@ impl Settings {
         }
         if args.no_background_fps {
             self.background_fps = false;
+        }
+        if args.menu_video {
+            self.static_menu_background = false;
+        }
+        if args.pause_video {
+            self.static_pause_background = false;
         }
     }
 }

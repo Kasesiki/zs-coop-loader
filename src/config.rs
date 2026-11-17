@@ -12,6 +12,9 @@ pub struct Settings {
     pub background_fps: bool,
     pub static_menu_background: bool,
     pub static_pause_background: bool,
+    pub anomaly_offscreen_culling: bool,
+    pub anomaly_fire_visuals: bool,
+    pub ai_timeslice: bool,
 }
 
 impl Settings {
@@ -45,6 +48,15 @@ impl Settings {
         }
         if args.pause_video {
             self.static_pause_background = false;
+        }
+        if args.no_anomaly_offscreen_culling {
+            self.anomaly_offscreen_culling = false;
+        }
+        if args.no_anomaly_fire_visuals {
+            self.anomaly_fire_visuals = false;
+        }
+        if args.no_ai_timeslice {
+            self.ai_timeslice = false;
         }
     }
 }

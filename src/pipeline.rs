@@ -109,7 +109,7 @@ pub fn build(coop_dir: &Path, original: &Path, settings: &Settings) -> Result<Bu
     Ok(result)
 }
 
-fn specs(settings: &Settings) -> [Spec; 10] {
+fn specs(settings: &Settings) -> [Spec; 13] {
     [
         Spec {
             enabled: settings.los_cache,
@@ -170,6 +170,24 @@ fn specs(settings: &Settings) -> [Spec; 10] {
             name: "apply_menu_background.csx",
             source: scripts::apply_menu_background,
             label: "菜单静态背景",
+        },
+        Spec {
+            enabled: settings.anomaly_fire_visuals,
+            name: "apply_anomaly_fire_visuals.csx",
+            source: scripts::apply_anomaly_fire_visuals,
+            label: "火焰异常视觉降载",
+        },
+        Spec {
+            enabled: settings.anomaly_offscreen_culling,
+            name: "apply_anomaly_offscreen.csx",
+            source: scripts::apply_anomaly_offscreen,
+            label: "异常屏外裁剪",
+        },
+        Spec {
+            enabled: settings.ai_timeslice,
+            name: "apply_ai_timeslice.csx",
+            source: scripts::apply_ai_timeslice,
+            label: "AI 分帧调度",
         },
     ]
 }

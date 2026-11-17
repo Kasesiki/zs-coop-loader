@@ -55,6 +55,15 @@ struct Args {
     /// 暂停菜单保留动态视频背景；默认使用静态背景图以降低 CPU/GPU 占用。
     #[arg(long)]
     pause_video: bool,
+    /// 禁用异常屏外裁剪；默认启用，远离摄像机的异常子实例不再执行 Step。
+    #[arg(long)]
+    no_anomaly_offscreen_culling: bool,
+    /// 保留火焰异常原始红光和长寿命小火球；默认启用降载。
+    #[arg(long)]
+    no_anomaly_fire_visuals: bool,
+    /// 禁用 AI 分帧调度；默认启用，在 NPC 较多时把团队扫描分摊到多帧。
+    #[arg(long)]
+    no_ai_timeslice: bool,
 
     /// 只生成优化后的 data.win，不替换游戏文件。
     #[arg(long, conflicts_with = "restore")]
@@ -91,6 +100,9 @@ fn run() -> Result<(), String> {
         background_fps: true,
         static_menu_background: true,
         static_pause_background: true,
+        anomaly_offscreen_culling: true,
+        anomaly_fire_visuals: true,
+        ai_timeslice: true,
     };
     settings.apply_cli(&args);
 

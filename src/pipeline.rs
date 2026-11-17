@@ -1,11 +1,16 @@
 use crate::config::Settings;
+use crate::scripts;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 struct Spec {
     enabled: bool,
-    script: &'static str,
+    /// 生成脚本文件名，同时用于临时文件命名。
+    name: &'static str,
+    /// build.rs 在编译期嵌入的 csx 内容。
+    source: &'static str,
     label: &'static str,
 }
 
@@ -20,15 +25,52 @@ impl Drop for BuildResult {
     }
 }
 
+/// 把嵌入的 csx 落到临时目录，UTMT CLI 目前只接受脚本路径。
+/// 目录在离开作用域时删除，失败路径也不会留下垃圾。
+struct ScriptFiles {
+    dir: PathBuf,
+    paths: Vec<PathBuf>,
+}
+
+impl Drop for ScriptFiles {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.dir);
+    }
+}
+
+fn materialize(specs: &[&Spec]) -> Result<ScriptFiles, String> {
+    let stamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|elapsed| elapsed.as_nanos())
+        .unwrap_or_default();
+    let dir = std::env::temp_dir().join(format!("zs-coop-scripts-{}-{stamp}", std::process::id()));
+    fs::create_dir_all(&dir)
+        .map_err(|error| format!("无法创建临时脚本目录 {}：{error}", dir.display()))?;
+
+    let mut files = ScriptFiles {
+        dir,
+        paths: Vec::with_capacity(specs.len()),
+    };
+    for spec in specs {
+        let path = files.dir.join(spec.name);
+        fs::write(&path, spec.source)
+            .map_err(|error| format!("无法写入临时脚本 {}：{error}", path.display()))?;
+        files.paths.push(path);
+    }
+    Ok(files)
+}
+
 pub fn build(coop_dir: &Path, original: &Path, settings: &Settings) -> Result<BuildResult, String> {
     if !original.is_file() {
         return Err(format!("找不到原始备份：{}", original.display()));
     }
     let specs = specs(settings);
+    let enabled: Vec<&Spec> = specs.iter().filter(|spec| spec.enabled).collect();
     let utmt = coop_dir.join("tool/utmt/UndertaleModCli");
-    if specs.iter().any(|spec| spec.enabled) && !utmt.is_file() {
+    if !enabled.is_empty() && !utmt.is_file() {
         return Err(format!("找不到 UTMT CLI：{}", utmt.display()));
     }
+
     let output = original.with_file_name("data.win.coop-tmp");
     fs::OpenOptions::new()
         .write(true)
@@ -40,29 +82,19 @@ pub fn build(coop_dir: &Path, original: &Path, settings: &Settings) -> Result<Bu
                 output.display()
             )
         })?;
-    let mut result = BuildResult {
+    let result = BuildResult {
         output,
-        applied: Vec::new(),
+        applied: enabled.iter().map(|spec| spec.label).collect(),
     };
-    let mut scripts = Vec::new();
-    for spec in specs.iter().filter(|spec| spec.enabled) {
-        let script = coop_dir.join("analysis/optimization").join(spec.script);
-        if !script.is_file() {
-            return Err(format!("找不到优化脚本：{}", script.display()));
-        }
-        scripts.push(script);
-        result.applied.push(spec.label);
-    }
-    if scripts.is_empty() {
+
+    if enabled.is_empty() {
         fs::copy(original, &result.output).map_err(|error| format!("复制原始备份失败：{error}"))?;
     } else {
+        let files = materialize(&enabled)?;
         let mut command = Command::new(&utmt);
-        command
-            .current_dir(coop_dir.join("analysis/optimization"))
-            .arg("load")
-            .arg(original);
-        for script in &scripts {
-            command.arg("-s").arg(script);
+        command.current_dir(coop_dir).arg("load").arg(original);
+        for path in &files.paths {
+            command.arg("-s").arg(path);
         }
         let status = command
             .args(["-o"])
@@ -77,47 +109,74 @@ pub fn build(coop_dir: &Path, original: &Path, settings: &Settings) -> Result<Bu
     Ok(result)
 }
 
-fn specs(settings: &Settings) -> [Spec; 8] {
+fn specs(settings: &Settings) -> [Spec; 9] {
     [
         Spec {
             enabled: settings.los_cache,
-            script: "apply_los_cache.csx",
+            name: "apply_los_cache.csx",
+            source: scripts::apply_los_cache,
             label: "LOS 缓存",
         },
         Spec {
             enabled: settings.aggressive_visuals,
-            script: "apply_aggressive_visuals.csx",
+            name: "apply_aggressive_visuals.csx",
+            source: scripts::apply_aggressive_visuals,
             label: "激进视觉优化",
         },
         Spec {
             enabled: settings.scene_optimization,
-            script: "apply_scene_startup.csx",
+            name: "apply_scene_startup.csx",
+            source: scripts::apply_scene_startup,
             label: "场景与启动优化",
         },
         Spec {
             enabled: settings.anomaly_emitter_culling,
-            script: "apply_anomaly_emitter_culling.csx",
+            name: "apply_anomaly_emitter_culling.csx",
+            source: scripts::apply_anomaly_emitter_culling,
             label: "异常父发射器裁剪",
         },
         Spec {
             enabled: settings.anomaly_fire_optimization,
-            script: "apply_anomaly_fire_optimization.csx",
+            name: "apply_anomaly_fire_optimization.csx",
+            source: scripts::apply_anomaly_fire_optimization,
             label: "火焰异常碰撞优化",
         },
         Spec {
             enabled: settings.anomaly_collision_prefilter,
-            script: "apply_anomaly_collision_prefilter.csx",
+            name: "apply_anomaly_collision_prefilter.csx",
+            source: scripts::apply_anomaly_collision_prefilter,
             label: "化学、电异常碰撞预筛选",
         },
         Spec {
             enabled: true,
-            script: "apply_conductor_seed.csx",
+            name: "apply_conductor_seed.csx",
+            source: scripts::apply_conductor_seed,
             label: "列车长 seed 选择",
         },
         Spec {
+            enabled: settings.background_fps,
+            name: "apply_background_fps.csx",
+            source: scripts::apply_background_fps,
+            label: "后台低帧率",
+        },
+        Spec {
             enabled: settings.gpu_scene_optimization,
-            script: "apply_gpu_scene.csx",
+            name: "apply_gpu_scene.csx",
+            source: scripts::apply_gpu_scene,
             label: "GPU 场景优化",
         },
     ]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn every_spec_has_an_embedded_script() {
+        for spec in specs(&Settings::default()) {
+            assert!(!spec.source.is_empty(), "{} 的脚本为空", spec.name);
+            assert!(spec.name.ends_with(".csx"));
+        }
+    }
 }

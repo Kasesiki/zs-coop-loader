@@ -124,3 +124,79 @@ UTMT 能编译新增的 GML，反编译 `npc_dialogue_map_go`、`lista_text`、
 当前已写入游戏的 `data.win`：375862552 字节，
 SHA-256 `df6c43148b7e59a813dd69874609aa6b0310b5b286a5af2ace45ecff1469baac`。
 原始备份仍为 `95252ac0...a7a7daa`，未改动。
+
+## 编译期嵌入 csx
+
+目标：加载器运行时不再依赖 `analysis/optimization/*.csx` 这些外部文件。
+
+实现：
+
+```text
+coop/build.rs                     读取 optimization 目录，生成 generated_globals.rs
+coop/src/scripts.rs               include! 生成的文件
+coop/src/pipeline.rs              Spec 直接持有嵌入的源码；运行时落临时目录再交给 UTMT
+```
+
+- `build.rs` 对目录内所有 `.csx` 排序后生成一个 `&str` 静态量，并把整个目录加入
+  `cargo:rerun-if-changed`，新增或删除脚本都会触发重新生成。
+- 生成的字符串使用 Rust 调试转义（`{source:?}`），脚本里出现引号、反斜杠或
+  `"#` 都不会破坏生成代码。
+- UTMT CLI 只接受脚本路径，因此启用补丁时仍会把源码写到
+  `$TMPDIR/zs-coop-scripts-<pid>-<nanos>/`，命令结束后由 `Drop` 删除；失败路径
+  同样会清理。
+- 外部依赖只剩 `tool/utmt/UndertaleModCli`，本次移除的是对 csx 文件的运行期依赖。
+
+验证（隐藏脚本目录后仍能生成全部补丁）：
+
+```bash
+cd coop
+mv analysis/optimization analysis/optimization.hidden
+./target/release/zs-coop-loader "../ZERO Sievert.exe" --dry-run
+mv analysis/optimization.hidden analysis/optimization
+```
+
+## 后台低帧率
+
+目标：窗口失去焦点时把帧率降到 10 FPS，降低 GPU 和 CPU 占用；重新获得焦点后恢复。
+
+实现文件：`coop/analysis/optimization/apply_background_fps.csx`，修改
+`gml_Object_obj_cursor_Step_1`（Begin Step）。
+
+选择这个钩子的原因：
+
+- `obj_cursor` 是 persistent 对象，在 logo 画面创建，之后在菜单、hub、raid 和
+  暂停菜单都存在；
+- 它的 Step 本来每帧就会调用 `game_in_focus()`，新增的 `window_has_focus()`
+  只是同类调用，额外开销可以忽略；
+- 只改一个代码段，不新增对象、不新增每帧循环。
+
+行为：
+
+- logo 画面（`obj_logo_screen` 存在）不降帧，避免启动和加载被拖慢；
+- 失焦时记录当前帧率（例如调试菜单的“Unlock framerate”可能设为 1000），再设为 10；
+- 如果失焦期间切换房间导致帧率被重置，下一帧会重新降回 10；
+- 重新获得焦点后恢复记录的帧率；
+- 命令行 `--no-background-fps` 可以完全关闭该补丁。
+
+边界与代价：
+
+- 降帧会同时降低逻辑步进频率，所有按步计算的计时（alarm、冷却、移动、动画）
+  在后台会慢 6 倍；用 `room_speed * 秒数` 计算的旧计时器会被拉长。这是“后台
+  低帧率”本身的语义，不是补丁额外引入的。
+- 音频线程不受影响；重新获得焦点后约 100 毫秒内恢复，输入延迟只影响刚切回的一瞬。
+- 没有采用 `sleep()`：它会阻塞音频和窗口事件；也没有只关闭绘制：那样 CPU
+  仍然跑满。`game_set_speed` 是游戏已经使用的运行时接口（调试菜单的
+  “Unlock framerate”就调用它），风险最小。
+- 如果游戏更新改名了 `obj_cursor` 或删除该事件，UTMT 会在补丁阶段报错，
+  不会生成半截代码。
+
+验证：
+
+- `cargo test --release --offline` 通过；
+- 隐藏 `analysis/optimization` 后 dry-run 通过；
+- 已写入并反编译确认 `obj_cursor_Step_1` 开头是降帧逻辑，原有光标逻辑完整保留；
+- 游戏内可通过 F11 打开帧率显示，切到后台应看到帧率降到约 10，切回后恢复。
+  当前环境无法启动游戏窗口，这一步需要人工确认。
+
+当前 `data.win`：375862296 字节，
+SHA-256 `b30f7f5ea433d4bcf7975471a8cf34845908a7b8c34a5e582785c744ffea5558`。

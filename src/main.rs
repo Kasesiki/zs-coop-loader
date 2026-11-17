@@ -1,6 +1,7 @@
 mod backup;
 mod config;
 mod pipeline;
+mod scripts;
 
 use clap::Parser;
 use std::env;
@@ -45,6 +46,9 @@ struct Args {
     /// 禁用 GPU 场景优化；默认关闭，因为实验版本会关闭草地风摆动。
     #[arg(long)]
     no_gpu_scene_optimization: bool,
+    /// 禁用后台低帧率；默认启用，窗口失去焦点时降到 10 FPS。
+    #[arg(long)]
+    no_background_fps: bool,
 
     /// 只生成优化后的 data.win，不替换游戏文件。
     #[arg(long, conflicts_with = "restore")]
@@ -78,6 +82,7 @@ fn run() -> Result<(), String> {
         anomaly_collision_prefilter: true,
         anomaly_fire_optimization: true,
         gpu_scene_optimization: false,
+        background_fps: true,
     };
     settings.apply_cli(&args);
 

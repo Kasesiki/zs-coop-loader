@@ -9,6 +9,7 @@ pub struct Settings {
     pub anomaly_collision_prefilter: bool,
     pub anomaly_fire_optimization: bool,
     pub gpu_scene_optimization: bool,
+    pub background_fps: bool,
 }
 
 impl Settings {
@@ -33,6 +34,9 @@ impl Settings {
         }
         if args.no_gpu_scene_optimization {
             self.gpu_scene_optimization = false;
+        }
+        if args.no_background_fps {
+            self.background_fps = false;
         }
     }
 }
